@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>狼人殺遊戲</title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- 遊戲標題 -->
+  <header>
+    <h1>🐺 狼人殺</h1>
+    
+  </header>
+
+  <!-- 遊戲設定畫面 -->
+  <section id="setup">
+    <h2>遊戲設定</h2>
+    <label>玩家人數：
+      <input type="number" id="playerCount" min="4" max="12" value="8">
+    </label>
+    <button id="startGame">開始遊戲</button>
+  </section>
+
+  <!-- 遊戲主畫面 -->
+  <main id="game" hidden>
+
+    <!-- 回合資訊 -->
+    <section id="status">
+      <h2>目前狀態</h2>
+      <p>回合：<span id="round">夜晚</span></p>
+      <p>存活玩家：<span id="aliveCount"></span></p>
+    </section>
+
+    <!-- 玩家區 -->
+    <section id="players">
+      <h2>玩家</h2>
+      <ul id="playerList">
+        <!-- JS 動態產生玩家 -->
+      </ul>
+    </section>
+
+    <!-- 行動區 -->
+    <section id="actions">
+      <h2>行動</h2>
+      <button id="killBtn">狼人行動</button>
+      <button id="voteBtn">白天投票</button>
+    </section>
+
+    <!-- 訊息紀錄 -->
+    <section id="log">
+      <h2>遊戲紀錄</h2>
+      <div id="logContent"></div>
+    </section>
+
+  </main>
+
+  <!-- 頁尾 -->
+  <footer>
+    <p>© 2025 狼人殺遊戲</p>
+  </footer>
+
+  <!-- JavaScript -->
+  <script src="script.js"></script>
+</body>
+</html>
+
+<script>// ===== 狼人殺 基礎遊戲邏輯 =====
+
+const startBtn = document.getElementById("startGame");
+const setup = document.getElementById("setup");
+const game = document.getElementById("game");
+const playerList = document.getElementById("playerList");
+const aliveCountSpan = document.getElementById("aliveCount");
+const roundSpan = document.getElementById("round");
+const logContent = document.getElementById("logContent");
+const killBtn = document.getElementById("killBtn");
+const voteBtn = document.getElementById("voteBtn");
+
+let players = [];
+let phase = "night"; // night | day
+
+// ===== 玩家物件 =====
+function createPlayers(count) {
+  const roles = [];
+  roles.push("狼人", "狼人");
+  roles.push("預言家");
+  while (roles.length < count) {
+    roles.push("平民");
+  }
+
+  shuffle(roles);
+
+  players = roles.map((role, index) => ({
+    id: index + 1,
+    name: `玩家 ${index + 1}`,
+    role,
+    alive: true
+  }));
+}
+
+// ===== 洗牌 =====
+function shuffle(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+}
+
+// ===== 顯示玩家 =====
+function renderPlayers() {
+  playerList.innerHTML = "";
+  players.forEach(p => {
+    const li = document.createElement("li");
+    li.textContent = `${p.name} - ${p.alive ? "存活" : "死亡"}`;
+    if (!p.alive) li.style.textDecoration = "line-through";
+    playerList.appendChild(li);
+  });
+  aliveCountSpan.textContent = players.filter(p => p.alive).length;
+}
+
+// ===== 紀錄訊息 =====
+function log(msg) {
+  const p = document.createElement("p");
+  p.textContent = msg;
+  logContent.appendChild(p);
+}
+
+// ===== 開始遊戲 =====
+startBtn.onclick = () => {
+  const count = Number(document.getElementById("playerCount").value);
+  createPlayers(count);
+  setup.hidden = true;
+  game.hidden = false;
+  phase = "night";
+  roundSpan.textContent = "夜晚";
+  logContent.innerHTML = "";
+  log("遊戲開始，夜晚降臨...");
+  renderPlayers();
+};
+
+// ===== 狼人夜晚行動 =====
+killBtn.onclick = () => {
+  if (phase !== "night") return alert("現在不是夜晚！");
+
+  const targets = players.filter(p => p.alive && p.role !== "狼人");
+  if (targets.length === 0) return;
+
+  const victim = targets[Math.floor(Math.random() * targets.length)];
+  victim.alive = false;
+  log(`🌙 夜晚：${victim.name} 被狼人殺害`);
+
+  phase = "day";
+  roundSpan.textContent = "白天";
+  renderPlayers();
+  checkWin();
+};
+
+// ===== 白天投票 =====
+voteBtn.onclick = () => {
+  if (phase !== "day") return alert("現在不是白天！");
+
+  const targets = players.filter(p => p.alive);
+  const voted = targets[Math.floor(Math.random() * targets.length)];
+  voted.alive = false;
+  log(`☀️ 白天：${voted.name} 被投票處刑`);
+
+  phase = "night";
+  roundSpan.textContent = "夜晚";
+  renderPlayers();
+  checkWin();
+};
+
+// ===== 勝負判斷 =====
+function checkWin() {
+  const alive = players.filter(p => p.alive);
+  const wolves = alive.filter(p => p.role === "狼人");
+  const humans = alive.filter(p => p.role !== "狼人");
+
+  if (wolves.length === 0) {
+    log("🎉 好人陣營勝利！");
+    disableActions();
+  } else if (wolves.length >= humans.length) {
+    log("💀 狼人陣營勝利！");
+    disableActions();
+  }
+}
+
+function disableActions() {
+  killBtn.disabled = true;
+  voteBtn.disabled = true;
+}
+</script>
