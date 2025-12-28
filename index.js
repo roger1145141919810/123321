@@ -96,7 +96,7 @@ io.on('connection', (socket) => {
         }, 1000);
     });
 
-    // 【跳過白天投票】
+   // 【跳過白天投票】
     socket.on('castSkipVote', () => {
         const roomId = socket.roomId;
         const room = rooms[roomId];
@@ -104,14 +104,29 @@ io.on('connection', (socket) => {
 
         room.skipVotes.add(socket.id);
         const aliveCount = room.players.filter(p => p.isAlive).length;
-        const required = aliveCount - 1;
+        const required = Math.max(1, aliveCount - 1); // 確保至少需要1票
 
-        io.to(roomId).emit('receiveMessage', { name: "系統", text: `⏭️ ${socket.username} 投票跳過 (${room.skipVotes.size}/${required})`, isSystem: true });
+        io.to(roomId).emit('receiveMessage', { 
+            name: "系統", 
+            text: `⏭️ ${socket.username} 投票跳過 (${room.skipVotes.size}/${required})`, 
+            isSystem: true 
+        });
 
         if (room.skipVotes.size >= required) {
+            // 1. 停止白天的 5 分鐘計時器
             if (roomTimers[roomId]) clearInterval(roomTimers[roomId]);
-            io.to(roomId).emit('receiveMessage', { name: "系統", text: "✅ 票數達成，跳過白天。", isSystem: true });
-            room.status = 'playing'; 
+            
+            // 2. 廣播訊息
+            io.to(roomId).emit('receiveMessage', { name: "系統", text: "✅ 票數達成，跳過白天，進入黑夜。", isSystem: true });
+            
+            // 3. 變更狀態並同步到前端
+            room.status = 'playing';
+            io.to(roomId).emit('updatePlayers', { players: room.players, status: room.status });
+            
+            // 4. 關鍵：重新發送身分以觸發前端 CSS 切換成黑夜模式
+            room.players.forEach(p => {
+                io.to(p.id).emit('assignRole', p.role);
+            });
         }
     });
 
