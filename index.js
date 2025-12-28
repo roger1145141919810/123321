@@ -100,6 +100,57 @@ io.on('connection', (socket) => {
     }
 
     socket.on('sendMessage', (d) => io.to(socket.roomId).emit('receiveMessage', d));
+    // 【新增：白天計時與跳過邏輯】
+let roomTimers = {}; // 存放各房間的計時器
+
+socket.on('startDayTimer', () => {
+    const roomId = socket.roomId;
+    const room = rooms[roomId];
+    if (!room || socket.id !== room.hostId) return;
+
+    room.status = 'day';
+    room.skipVotes = new Set(); // 使用 Set 避免重複投票
+    
+    // 清除舊計時器防止重疊
+    if (roomTimers[roomId]) clearInterval(roomTimers[roomId]);
+
+    let timeLeft = 300; // 5 分鐘 (300秒)
+    io.to(roomId).emit('timerUpdate', timeLeft);
+
+    roomTimers[roomId] = setInterval(() => {
+        timeLeft--;
+        io.to(roomId).emit('timerUpdate', timeLeft);
+
+        if (timeLeft <= 0) {
+            clearInterval(roomTimers[roomId]);
+            io.to(roomId).emit('receiveMessage', { name: "系統", text: "⏰ 時間到！白天結束，進入黑夜。", isSystem: true });
+            // 這裡後續可以銜接 enterNight(roomId) 邏輯
+        }
+    }, 1000);
+});
+
+// 處理跳過白天的投票
+socket.on('castSkipVote', () => {
+    const roomId = socket.roomId;
+    const room = rooms[roomId];
+    if (!room || room.status !== 'day') return;
+
+    room.skipVotes.add(socket.id);
+    const alivePlayers = room.players.filter(p => p.isAlive).length;
+    const requiredVotes = alivePlayers - 1;
+
+    io.to(roomId).emit('receiveMessage', { 
+        name: "系統", 
+        text: `⏭️ ${socket.username} 投下跳過票 (${room.skipVotes.size}/${requiredVotes})`, 
+        isSystem: true 
+    });
+
+    if (room.skipVotes.size >= requiredVotes) {
+        clearInterval(roomTimers[roomId]);
+        io.to(roomId).emit('receiveMessage', { name: "系統", text: "✅ 票數達成！立即跳過白天。", isSystem: true });
+        // 觸發進入黑夜邏輯
+    }
+});
 });
 
 server.listen(process.env.PORT || 3000);
