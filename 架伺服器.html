@@ -18,6 +18,18 @@
         .role-box { font-size: 24px; color: #f1c40f; font-weight: bold; margin: 15px 0; }
         #logContent { height: 150px; overflow-y: auto; background: #1a1a2e; padding: 10px; border-radius: 5px; text-align: left; font-size: 14px; }
     </style>
+    /* 夜晚的背景 */
+body.night-mode {
+    background-color: #1a1a2e; /* 深藍色 */
+    transition: background-color 1s ease; /* 讓顏色切換更平滑 */
+}
+
+/* 白天的背景 */
+body.day-mode {
+    background-color: #f39c12; /* 暖橘色 */
+    color: #1a1a2e;
+    transition: background-color 1s ease;
+}
 </head>
 <body>
 
@@ -95,9 +107,15 @@
 
         // 接收身分發放
         socket.on('assignRole', (role) => {
-            myRoleDisplay.innerText = "你的身分是：" + role;
-            log("法官已發牌，遊戲開始！");
-            startBtn.style.display = "none"; // 遊戲開始後隱藏開始按鈕
+    myRoleDisplay.innerText = "你的身分是：" + role;
+    
+    // 遊戲開始，大家一起進入黑夜
+    document.body.className = "night-mode"; 
+    document.getElementById("round").innerText = "夜晚";
+    
+    log("法官已發牌，天黑請閉眼...");
+    startBtn.style.display = "none"; 
+});
         });
 
         // 紀錄訊息工具
