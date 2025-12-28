@@ -26,13 +26,31 @@ io.on('connection', (socket) => {
         socket.join(roomId);
         socket.roomId = roomId;
         socket.username = username;
-        const player = { id: socket.id, name: username, role: null, isHost: room.players.length === 0, isAlive: true };
+        const player = { id: socket.id, name: username, role: null, isHost: room.players.length === 0, isAlive: true, isBot: false };
         if (player.isHost) room.hostId = socket.id;
         room.players.push(player);
         broadcastUpdate(roomId);
     });
 
-    // 遊戲開始與狼人行動核心
+    // --- 測試專用：加入機器人 ---
+    socket.on('addTestBots', () => {
+        const room = rooms[socket.roomId];
+        if (!room || room.status !== 'waiting') return;
+        const needed = 6 - room.players.length;
+        for (let i = 1; i <= needed; i++) {
+            const botId = `bot_${Math.random().toString(36).substr(2, 5)}`;
+            room.players.push({
+                id: botId,
+                name: `機器人${i}號`,
+                role: null,
+                isHost: false,
+                isAlive: true,
+                isBot: true
+            });
+        }
+        broadcastUpdate(socket.roomId);
+    });
+
     socket.on('startGame', () => {
         const room = rooms[socket.roomId];
         if (!room || room.players.length < 6) return socket.emit('errorMessage', '人數不足 6 人');
@@ -46,25 +64,6 @@ io.on('connection', (socket) => {
         if (room?.status === 'night_wolf') {
             room.nightAction.wolfVotes[socket.id] = targetId;
             delete room.nightAction.wolfConfirmations[socket.id]; 
-            syncWolfUI(room);
-        }
-    });
-
-    socket.on('wolfConfirm', () => {
-        const room = rooms[socket.roomId];
-        if (room?.status === 'night_wolf') {
-            room.nightAction.wolfConfirmations[socket.id] = true;
-            const aliveWolves = room.players.filter(p => p.role === '狼人' && p.isAlive);
-            const confirms = aliveWolves.filter(w => room.nightAction.wolfConfirmations[w.id]);
-            const votes = aliveWolves.map(w => room.nightAction.wolfVotes[w.id]);
-            const uniqueVotes = [...new Set(votes.filter(v => v !== null))];
-
-            // 修復：當所有活著的狼人鎖定同一人，直接結算並進入下一階段
-            if (confirms.length === aliveWolves.length && uniqueVotes.length === 1) {
-                room.nightAction.finalKilledId = uniqueVotes[0];
-                // 提早結束狼人回合，進入女巫階段
-                triggerWitchPhase(socket.roomId);
-            }
             syncWolfUI(room);
         }
     });
