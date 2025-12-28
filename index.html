@@ -6,7 +6,6 @@
     <title>🐺 狼人殺：終極連線版</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        /* --- 這裡是你要求的美化 CSS --- */
         :root {
             --bg-dark: #121212;
             --card-bg: rgba(255, 255, 255, 0.05);
@@ -22,11 +21,12 @@
             color: var(--text-main);
             text-align: center;
             margin: 0;
-            transition: background 1s ease;
+            transition: background 1.5s ease;
             min-height: 100vh;
         }
 
-        body.night {
+        /* 黑夜視覺效果 */
+        body.night-mode {
             background: radial-gradient(circle at center, #0f3460 0%, #000000 100%) !important;
         }
 
@@ -41,42 +41,6 @@
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
         }
 
-        input[type="text"] {
-            width: 85%;
-            padding: 12px;
-            margin: 10px 0;
-            border-radius: 8px;
-            border: 1px solid #444;
-            background: rgba(0, 0, 0, 0.3);
-            color: white;
-            font-size: 16px;
-            outline: none;
-        }
-
-        button {
-            padding: 10px 20px;
-            border-radius: 8px;
-            border: none;
-            cursor: pointer;
-            font-weight: bold;
-            transition: all 0.2s ease;
-        }
-
-        .btn-start {
-            background: linear-gradient(45deg, var(--primary-green), #2ecc71);
-            color: white;
-            width: 90%;
-            font-size: 18px;
-            margin-top: 10px;
-        }
-
-        .btn-kick {
-            background: var(--primary-red);
-            color: white;
-            padding: 4px 12px;
-            font-size: 11px;
-        }
-
         .player-item {
             display: flex;
             justify-content: space-between;
@@ -87,10 +51,21 @@
             border-radius: 8px;
         }
 
-        .player-item.dead {
-            opacity: 0.4;
-            filter: grayscale(1);
+        .player-item.dead { opacity: 0.4; filter: grayscale(1); }
+
+        /* 行動按鈕樣式 */
+        .action-btn {
+            padding: 4px 8px;
+            font-size: 12px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            margin-left: 5px;
+            color: white;
         }
+        .btn-kill { background: #c0392b; }
+        .btn-check { background: #8e44ad; }
+        .btn-witch { background: #27ae60; }
 
         #chatBox {
             height: 180px;
@@ -112,21 +87,21 @@
     <div id="setup">
         <section>
             <h2 style="color: var(--accent-gold);">🐺 狼人殺：加入村莊</h2>
-            <input type="text" id="roomInput" placeholder="輸入房間號碼 (例如: 888)">
-            <input type="text" id="username" placeholder="你的暱稱">
-            <button onclick="join()" class="btn-start">進入房間</button>
+            <input type="text" id="roomInput" placeholder="輸入房間號碼" style="width:80%; padding:10px; margin:5px; border-radius:5px;">
+            <input type="text" id="username" placeholder="你的暱稱" style="width:80%; padding:10px; margin:5px; border-radius:5px;">
+            <button onclick="join()" style="width:85%; background:var(--primary-green); color:white; padding:12px; margin-top:10px; border-radius:8px;">進入房間</button>
         </section>
     </div>
 
     <main id="game" class="hidden">
         <section>
-            <div>房間：<span id="displayRoom" style="color:var(--accent-gold);"></span></div>
+            <div>房間：<span id="displayRoom" style="color:var(--accent-gold);"></span> | 狀態：<span id="gamePhase">等待中</span></div>
             <div id="myRole">⏳ 等待房長發牌...</div>
-            <div id="timerDisplay" style="font-size: 20px; color: #e94560; font-weight: bold; margin: 10px 0;">
-    ⏳ 剩餘時間：--:--
-</div>
-<button id="skipBtn" class="btn-action hidden" onclick="skipDay()" style="background:#3498db; color:white; padding:10px 20px;">⏭️ 跳過發言</button>
-            <button id="startBtn" class="btn-start hidden" onclick="start()">開始遊戲 (至少6人)</button>
+            <div id="timerDisplay" style="font-size: 20px; color: #e94560; font-weight: bold; margin: 10px 0;">⏳ 剩餘時間：--:--</div>
+            
+            <button id="skipBtn" class="hidden" onclick="skipDay()" style="background:#3498db; color:white; padding:10px 20px; border-radius:8px; border:none; cursor:pointer;">⏭️ 跳過發言 / 投票</button>
+            
+            <button id="startBtn" class="hidden" onclick="start()" style="background:var(--primary-green); color:white; padding:10px 20px; border-radius:8px; border:none;">開始遊戲</button>
         </section>
 
         <section>
@@ -137,15 +112,15 @@
         <section>
             <div id="chatBox"></div>
             <div style="display:flex; gap:10px;">
-                <input type="text" id="chatInput" placeholder="輸入訊息..." style="flex:1;">
-                <button onclick="send()" style="background:var(--primary-red); color:white;">送出</button>
+                <input type="text" id="chatInput" placeholder="輸入訊息..." style="flex:1; padding:8px; border-radius:5px;">
+                <button onclick="send()" style="background:var(--primary-red); color:white; padding:8px 15px; border-radius:5px; border:none;">送出</button>
             </div>
         </section>
     </main>
 
     <script>
         const socket = io("https://were-wolf.onrender.com");
-        let myName = "", amIHost = false, currentStatus = 'waiting';
+        let myName = "", amIHost = false, myRole = null, myId = null, isAlive = true;
 
         function join() {
             const r = document.getElementById("roomInput").value;
@@ -153,109 +128,132 @@
             if(r && myName) {
                 socket.emit('joinRoom', { roomId: r, username: myName });
                 document.getElementById("displayRoom").innerText = r;
-            } else {
-                alert("請輸入房號與暱稱！");
+                myId = socket.id;
             }
         }
 
         socket.on('updatePlayers', ({ players, status }) => {
-            // 切換畫面
             document.getElementById("setup").classList.add("hidden");
             document.getElementById("game").classList.remove("hidden");
             document.getElementById("pCount").innerText = players.length;
+            
+            const me = players.find(p => p.name === myName);
+            if(me) {
+                isAlive = me.isAlive;
+                myId = me.id;
+            }
 
+            // 1. 更新背景與狀態文字
+            const phaseLabel = { 'waiting': '等待中', 'night': '🌑 黑夜行動', 'day': '☀️ 白天討論' };
+            document.getElementById("gamePhase").innerText = phaseLabel[status] || '進行中';
+            
+            if(status === 'night') {
+                document.body.classList.add("night-mode");
+            } else {
+                document.body.classList.remove("night-mode");
+            }
+
+            // 2. 控制投票按鈕隱藏邏輯
+            const skipBtn = document.getElementById("skipBtn");
+            if (status === 'day' && isAlive) {
+                skipBtn.classList.remove("hidden");
+                skipBtn.disabled = false;
+                skipBtn.innerText = "⏭️ 跳過發言 / 投票";
+            } else {
+                skipBtn.classList.add("hidden");
+            }
+
+            // 3. 渲染名單與角色按鈕
             const list = document.getElementById("playerList");
             list.innerHTML = "";
             
             players.forEach(p => {
                 const div = document.createElement("div");
                 div.className = `player-item ${!p.isAlive ? 'dead' : ''}`;
-                div.innerHTML = `<span>${p.isHost ? '👑' : '👤'} ${p.name} ${!p.isAlive ? '(淘汰)' : ''}</span>`;
-                
-                // 房長踢人功能 (僅限等待大廳)
-                if(amIHost && status === 'waiting' && p.id !== socket.id) {
-                    const kBtn = document.createElement("button");
-                    kBtn.innerText = "踢出";
-                    kBtn.className = "btn-kick";
-                    kBtn.onclick = () => socket.emit('kickPlayer', p.id);
-                    div.appendChild(kBtn);
+                let html = `<span>${p.isHost ? '👑' : '👤'} ${p.name} ${!p.isAlive ? '(淘汰)' : ''}</span><div>`;
+
+                // 黑夜行動按鈕 (只有自己活著、且是黑夜、且目標不是自己且活著時顯示)
+                if (status === 'night' && isAlive && p.isAlive && p.name !== myName) {
+                    if (myRole === '狼人') {
+                        html += `<button class="action-btn btn-kill" onclick="doAction('wolfKill','${p.id}')">殺死</button>`;
+                    } else if (myRole === '預言家') {
+                        html += `<button class="action-btn btn-check" onclick="doAction('checkRole','${p.id}')">查驗</button>`;
+                    } else if (myRole === '女巫') {
+                        html += `<button class="action-btn btn-witch" onclick="doAction('witchPoison','${p.id}')">毒人</button>`;
+                    }
                 }
+                
+                // 房長踢人
+                if(amIHost && status === 'waiting' && p.name !== myName) {
+                    html += `<button class="action-btn" style="background:#444" onclick="socket.emit('kickPlayer','${p.id}')">踢出</button>`;
+                }
+
+                div.innerHTML = html + `</div>`;
                 list.appendChild(div);
             });
 
-            // 房長按鈕管理
+            // 房長開始按鈕
+            const sBtn = document.getElementById("startBtn");
             if(amIHost && status === 'waiting') {
-                const sBtn = document.getElementById("startBtn");
                 sBtn.classList.remove("hidden");
-                if (players.length < 6) {
-                    sBtn.disabled = true;
-                    sBtn.style.opacity = "0.5";
-                    sBtn.innerText = `人數不足 (${players.length}/6)`;
-                } else {
-                    sBtn.disabled = false;
-                    sBtn.style.opacity = "1";
-                    sBtn.innerText = "人數已齊全，開始發牌";
-                }
+                sBtn.disabled = (players.length < 6);
             } else {
-                document.getElementById("startBtn").classList.add("hidden");
+                sBtn.classList.add("hidden");
             }
         });
 
+        // 接收身分
         socket.on('assignRole', (role) => {
+            myRole = role;
             document.getElementById("myRole").innerText = "身分：" + role;
-            document.body.classList.add("night");
         });
 
-        socket.on('gameOver', (data) => {
-            alert(`🎉 ${data.winner} 勝利！\n\n公布身分：\n` + data.allRoles.map(p => `${p.name}: ${p.role}`).join('\n'));
-            location.reload();
-        });
+        // 處理黑夜行動
+        function doAction(actionType, targetId) {
+            if (actionType === 'wolfKill') socket.emit('wolfKill', targetId);
+            if (actionType === 'checkRole') socket.emit('checkRole', targetId);
+            if (actionType === 'witchPoison') socket.emit('witchAction', { type: 'poison', targetId });
+            alert("行動已送出");
+        }
 
-        socket.on('hostStatus', s => amIHost = s);
-        socket.on('errorMessage', m => alert(m));
-        
+        // 預言家查驗結果
+        socket.on('checkResult', msg => alert(msg));
+
+        // 投票跳過
+        function skipDay() {
+            socket.emit('castSkipVote');
+            const btn = document.getElementById("skipBtn");
+            btn.disabled = true;
+            btn.innerText = "⌛ 已投票";
+            setTimeout(() => btn.classList.add("hidden"), 500); // 點完半秒後消失
+        }
+
         function start() { socket.emit('startGame'); }
+
+        // 計時器
+        socket.on('timerUpdate', (seconds) => {
+            const min = Math.floor(seconds / 60);
+            const sec = seconds % 60;
+            document.getElementById("timerDisplay").innerText = `⏳ 剩餘時間：${min}:${sec < 10 ? '0' : ''}${sec}`;
+        });
+
+        // 聊天與訊息
         function send() { 
             const i = document.getElementById("chatInput");
-            if(i.value) { 
-                socket.emit('sendMessage', { name: myName, text: i.value }); 
-                i.value = ""; 
-            }
+            if(i.value) { socket.emit('sendMessage', { name: myName, text: i.value }); i.value = ""; }
         }
-        
         socket.on('receiveMessage', d => {
             const b = document.getElementById("chatBox");
             b.innerHTML += `<div><b style="color:var(--accent-gold)">${d.name}:</b> ${d.text}</div>`;
             b.scrollTop = b.scrollHeight;
         });
-
-        // 支援 Enter 鍵送出
-        document.getElementById("chatInput").addEventListener("keypress", (e) => {
-            if(e.key === "Enter") send();
+        document.getElementById("chatInput").addEventListener("keypress", (e) => { if(e.key === "Enter") send(); });
+        socket.on('hostStatus', s => amIHost = s);
+        socket.on('errorMessage', m => alert(m));
+        socket.on('gameOver', (data) => {
+            alert(`🎉 ${data.winner} 勝利！`);
+            location.reload();
         });
-        // 更新計時器顯示
-socket.on('timerUpdate', (seconds) => {
-    const min = Math.floor(seconds / 60);
-    const sec = seconds % 60;
-    document.getElementById("timerDisplay").innerText = `⏳ 剩餘時間：${min}:${sec < 10 ? '0' : ''}${sec}`;
-    
-    // 白天狀態下顯示跳過按鈕
-    if (seconds > 0) {
-        document.getElementById("skipBtn").classList.remove("hidden");
-    }
-});
-
-function skipDay() {
-    socket.emit('castSkipVote');
-    document.getElementById("skipBtn").disabled = true; // 投過後禁用
-    document.getElementById("skipBtn").innerText = "已投票";
-}
-
-// 修改原本的 start 函數，讓房長開始遊戲時同時啟動計時
-function start() {
-    socket.emit('startGame');
-    socket.emit('startDayTimer'); 
-}
     </script>
 </body>
 </html>
