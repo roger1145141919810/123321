@@ -65,6 +65,22 @@ io.on('connection', (socket) => {
 
     // 斷線即淘汰邏輯
     socket.on('disconnect', () => {
+        // 在 socket.on('disconnect') 裡面
+    if (room.status === 'waiting') {
+        room.players = room.players.filter(p => p.id !== socket.id);
+        
+        // 如果斷開的是房長，且房間還有其他人
+        if (socket.id === room.hostId && room.players.length > 0) {
+            // 隨機選取一個玩家索引
+            const randomIndex = Math.floor(Math.random() * room.players.length);
+            const newHost = room.players[randomIndex];
+            
+            room.hostId = newHost.id;
+            newHost.isHost = true;
+            
+            io.to(roomId).emit('receiveMessage', { name: "系統", text: `👑 房長已離開，新房長由 ${newHost.name} 擔任。`, isSystem: true });
+        }
+    }
         const room = rooms[socket.roomId];
         if (!room) return;
         if (room.status === 'waiting') {
