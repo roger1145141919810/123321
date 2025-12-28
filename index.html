@@ -1,261 +1,110 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🐺 狼人殺：終極連線版</title>
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <title>Gemini 狼人殺系統</title>
+    <script src="/socket.io/socket.io.js"></script>
     <style>
-        /* --- 這裡是你要求的美化 CSS --- */
-        :root {
-            --bg-dark: #121212;
-            --card-bg: rgba(255, 255, 255, 0.05);
-            --primary-red: #e94560;
-            --primary-green: #27ae60;
-            --accent-gold: #f1c40f;
-            --text-main: #e0e0e0;
-        }
-
-        body {
-            font-family: 'Segoe UI', 'PingFang TC', sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            color: var(--text-main);
-            text-align: center;
-            margin: 0;
-            transition: background 1s ease;
-            min-height: 100vh;
-        }
-
-        body.night {
-            background: radial-gradient(circle at center, #0f3460 0%, #000000 100%) !important;
-        }
-
-        section {
-            background: var(--card-bg);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 20px;
-            border-radius: 16px;
-            margin: 15px auto;
-            max-width: 450px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        }
-
-        input[type="text"] {
-            width: 85%;
-            padding: 12px;
-            margin: 10px 0;
-            border-radius: 8px;
-            border: 1px solid #444;
-            background: rgba(0, 0, 0, 0.3);
-            color: white;
-            font-size: 16px;
-            outline: none;
-        }
-
-        button {
-            padding: 10px 20px;
-            border-radius: 8px;
-            border: none;
-            cursor: pointer;
-            font-weight: bold;
-            transition: all 0.2s ease;
-        }
-
-        .btn-start {
-            background: linear-gradient(45deg, var(--primary-green), #2ecc71);
-            color: white;
-            width: 90%;
-            font-size: 18px;
-            margin-top: 10px;
-        }
-
-        .btn-kick {
-            background: var(--primary-red);
-            color: white;
-            padding: 4px 12px;
-            font-size: 11px;
-        }
-
-        .player-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px;
-            margin: 8px 0;
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 8px;
-        }
-
-        .player-item.dead {
-            opacity: 0.4;
-            filter: grayscale(1);
-        }
-
-        #chatBox {
-            height: 180px;
-            overflow-y: auto;
-            background: rgba(0, 0, 0, 0.4);
-            border-radius: 8px;
-            padding: 12px;
-            font-size: 14px;
-            margin-bottom: 15px;
-            text-align: left;
-        }
-
-        .hidden { display: none !important; }
-        #myRole { font-size: 24px; color: var(--accent-gold); margin: 10px 0; font-weight: bold; }
+        body { font-family: sans-serif; transition: 0.5s; background: #f0f0f0; }
+        .night { background: #1a1a2e; color: white; }
+        #game-container { display: flex; gap: 20px; padding: 20px; }
+        #player-list { width: 300px; border: 1px solid #ccc; padding: 10px; border-radius: 8px; }
+        .player-card { padding: 10px; margin: 5px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; }
+        .dead { background: #555 !important; text-decoration: line-through; color: #888; }
+        #chat-box { flex-grow: 1; height: 400px; border: 1px solid #ccc; overflow-y: auto; background: white; color: black; }
+        .system-msg { color: #d9534f; font-weight: bold; }
     </style>
 </head>
 <body>
-
     <div id="setup">
-        <section>
-            <h2 style="color: var(--accent-gold);">🐺 狼人殺：加入村莊</h2>
-            <input type="text" id="roomInput" placeholder="輸入房間號碼 (例如: 888)">
-            <input type="text" id="username" placeholder="你的暱稱">
-            <button onclick="join()" class="btn-start">進入房間</button>
-        </section>
+        <input id="username" placeholder="暱稱">
+        <input id="room-id" placeholder="房間號">
+        <button onclick="join()">加入房間</button>
     </div>
 
-    <main id="game" class="hidden">
-        <section>
-            <div>房間：<span id="displayRoom" style="color:var(--accent-gold);"></span></div>
-            <div id="myRole">⏳ 等待房長發牌...</div>
-            <div id="timerDisplay" style="font-size: 20px; color: #e94560; font-weight: bold; margin: 10px 0;">
-    ⏳ 剩餘時間：--:--
-</div>
-<button id="skipBtn" class="btn-action hidden" onclick="skipDay()" style="background:#3498db; color:white; padding:10px 20px;">⏭️ 跳過發言</button>
-            <button id="startBtn" class="btn-start hidden" onclick="start()">開始遊戲 (至少6人)</button>
-        </section>
-
-        <section>
-            <h3>村莊名單 (<span id="pCount">0</span>)</h3>
-            <div id="playerList"></div>
-        </section>
-
-        <section>
-            <div id="chatBox"></div>
-            <div style="display:flex; gap:10px;">
-                <input type="text" id="chatInput" placeholder="輸入訊息..." style="flex:1;">
-                <button onclick="send()" style="background:var(--primary-red); color:white;">送出</button>
+    <div id="game-ui" style="display:none;">
+        <h2 id="phase-title">等待開局...</h2>
+        <div id="timer">倒數: --</div>
+        <div id="my-role">我的身分: 未知</div>
+        
+        <div id="game-container">
+            <div id="player-list">
+                <h3>玩家列表 (點擊頭像發動技能)</h3>
+                <div id="players"></div>
             </div>
-        </section>
-    </main>
+            <div id="chat-section">
+                <div id="chat-box"></div>
+                <input id="msg-input" placeholder="輸入訊息...">
+                <button onclick="send()">送出</button>
+                <button id="start-btn" onclick="start()" style="display:none;">開始遊戲</button>
+            </div>
+        </div>
+    </div>
 
     <script>
-        const socket = io("https://were-wolf.onrender.com");
-        let myName = "", amIHost = false, currentStatus = 'waiting';
+        const socket = io();
+        let myId, myRole, currentStatus;
 
         function join() {
-            const r = document.getElementById("roomInput").value;
-            myName = document.getElementById("username").value;
-            if(r && myName) {
-                socket.emit('joinRoom', { roomId: r, username: myName });
-                document.getElementById("displayRoom").innerText = r;
-            } else {
-                alert("請輸入房號與暱稱！");
-            }
+            const username = document.getElementById('username').value;
+            const roomId = document.getElementById('room-id').value;
+            socket.emit('joinRoom', { roomId, username });
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('game-ui').style.display = 'block';
         }
 
-        socket.on('updatePlayers', ({ players, status }) => {
-            // 切換畫面
-            document.getElementById("setup").classList.add("hidden");
-            document.getElementById("game").classList.remove("hidden");
-            document.getElementById("pCount").innerText = players.length;
+        function start() { socket.emit('startGame'); }
 
-            const list = document.getElementById("playerList");
-            list.innerHTML = "";
-            
+        socket.on('assignRole', role => {
+            myRole = role;
+            document.getElementById('my-role').innerText = `我的身分: ${role}`;
+        });
+
+        socket.on('phaseChange', status => {
+            currentStatus = status;
+            document.body.className = status === 'night' ? 'night' : '';
+            document.getElementById('phase-title').innerText = status === 'night' ? '🌙 黑夜階段' : '☀️ 白天討論';
+        });
+
+        socket.on('updatePlayers', players => {
+            const list = document.getElementById('players');
+            list.innerHTML = '';
             players.forEach(p => {
-                const div = document.createElement("div");
-                div.className = `player-item ${!p.isAlive ? 'dead' : ''}`;
-                div.innerHTML = `<span>${p.isHost ? '👑' : '👤'} ${p.name} ${!p.isAlive ? '(淘汰)' : ''}</span>`;
-                
-                // 房長踢人功能 (僅限等待大廳)
-                if(amIHost && status === 'waiting' && p.id !== socket.id) {
-                    const kBtn = document.createElement("button");
-                    kBtn.innerText = "踢出";
-                    kBtn.className = "btn-kick";
-                    kBtn.onclick = () => socket.emit('kickPlayer', p.id);
-                    div.appendChild(kBtn);
-                }
+                if(p.id === socket.id && rooms[p.id]?.hostId === p.id) document.getElementById('start-btn').style.display = 'block';
+                const div = document.createElement('div');
+                div.className = `player-card ${p.isAlive ? '' : 'dead'}`;
+                div.innerText = `${p.username}`;
+                div.onclick = () => useSkill(p.id);
                 list.appendChild(div);
             });
-
-            // 房長按鈕管理
-            if(amIHost && status === 'waiting') {
-                const sBtn = document.getElementById("startBtn");
-                sBtn.classList.remove("hidden");
-                if (players.length < 6) {
-                    sBtn.disabled = true;
-                    sBtn.style.opacity = "0.5";
-                    sBtn.innerText = `人數不足 (${players.length}/6)`;
-                } else {
-                    sBtn.disabled = false;
-                    sBtn.style.opacity = "1";
-                    sBtn.innerText = "人數已齊全，開始發牌";
-                }
-            } else {
-                document.getElementById("startBtn").classList.add("hidden");
-            }
         });
 
-        socket.on('assignRole', (role) => {
-            document.getElementById("myRole").innerText = "身分：" + role;
-            document.body.classList.add("night");
-        });
-
-        socket.on('gameOver', (data) => {
-            alert(`🎉 ${data.winner} 勝利！\n\n公布身分：\n` + data.allRoles.map(p => `${p.name}: ${p.role}`).join('\n'));
-            location.reload();
-        });
-
-        socket.on('hostStatus', s => amIHost = s);
-        socket.on('errorMessage', m => alert(m));
-        
-        function start() { socket.emit('startGame'); }
-        function send() { 
-            const i = document.getElementById("chatInput");
-            if(i.value) { 
-                socket.emit('sendMessage', { name: myName, text: i.value }); 
-                i.value = ""; 
-            }
+        function useSkill(targetId) {
+            if (currentStatus !== 'night') return;
+            let type = '';
+            if (myRole === '狼人') type = 'wolfKill';
+            else if (myRole === '預言家') type = 'check';
+            else if (myRole === '守衛') type = 'guard';
+            
+            if (type) socket.emit('submitAction', { type, targetId });
         }
-        
-        socket.on('receiveMessage', d => {
-            const b = document.getElementById("chatBox");
-            b.innerHTML += `<div><b style="color:var(--accent-gold)">${d.name}:</b> ${d.text}</div>`;
-            b.scrollTop = b.scrollHeight;
+
+        socket.on('timerUpdate', time => { document.getElementById('timer').innerText = `倒數: ${time}s`; });
+
+        socket.on('receiveMessage', data => {
+            const box = document.getElementById('chat-box');
+            const p = document.createElement('p');
+            if(data.isSystem) p.className = 'system-msg';
+            p.innerText = `${data.name}: ${data.text}`;
+            box.appendChild(p);
+            box.scrollTop = box.scrollHeight;
         });
 
-        // 支援 Enter 鍵送出
-        document.getElementById("chatInput").addEventListener("keypress", (e) => {
-            if(e.key === "Enter") send();
-        });
-        // 更新計時器顯示
-socket.on('timerUpdate', (seconds) => {
-    const min = Math.floor(seconds / 60);
-    const sec = seconds % 60;
-    document.getElementById("timerDisplay").innerText = `⏳ 剩餘時間：${min}:${sec < 10 ? '0' : ''}${sec}`;
-    
-    // 白天狀態下顯示跳過按鈕
-    if (seconds > 0) {
-        document.getElementById("skipBtn").classList.remove("hidden");
-    }
-});
-
-function skipDay() {
-    socket.emit('castSkipVote');
-    document.getElementById("skipBtn").disabled = true; // 投過後禁用
-    document.getElementById("skipBtn").innerText = "已投票";
-}
-
-// 修改原本的 start 函數，讓房長開始遊戲時同時啟動計時
-function start() {
-    socket.emit('startGame');
-    socket.emit('startDayTimer'); 
-}
+        function send() {
+            const input = document.getElementById('msg-input');
+            socket.emit('sendMessage', input.value);
+            input.value = '';
+        }
     </script>
 </body>
 </html>
