@@ -207,7 +207,7 @@ io.on('connection', (socket) => {
         const room = rooms[roomId];
         room.status = 'day';
         io.to(roomId).emit('updatePlayers', { players: room.players, status: room.status });
-        let timeLeft = 60;
+        let timeLeft = 300;
         roomTimers[roomId] = setInterval(() => {
             timeLeft--;
             io.to(roomId).emit('timerUpdate', timeLeft);
