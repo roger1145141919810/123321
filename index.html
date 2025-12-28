@@ -3,133 +3,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🐺 狼人殺法官系統</title>
+    <title>🐺 狼人殺：終極連線版</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         body { font-family: sans-serif; background: #2c3e50; color: white; text-align: center; margin: 0; transition: 0.5s; }
-        .night { background: #1a1a2e !important; color: #e94560 !important; }
-        section { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 10px; margin: 10px auto; max-width: 500px; border: 1px solid rgba(255,255,255,0.1); }
+        .night { background: #1a1a2e !important; }
+        section { background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px; margin: 10px auto; max-width: 500px; }
         .hidden { display: none; }
-        #chatBox { height: 180px; overflow-y: auto; background: rgba(0,0,0,0.2); margin: 10px 0; padding: 10px; text-align: left; border-radius: 5px; }
-        .player-item { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #444; align-items: center; }
-        .dead { text-decoration: line-through; color: #888; opacity: 0.6; }
-        button { cursor: pointer; border-radius: 5px; border: none; padding: 8px 15px; font-weight: bold; }
-        .btn-kick { background: #ff4d4d; color: white; padding: 5px 10px; font-size: 12px; }
-        .btn-start { background: #27ae60; color: white; width: 100%; font-size: 18px; margin-top: 10px; }
-        input { padding: 10px; width: 80%; border-radius: 5px; border: none; margin-bottom: 10px; }
+        #chatBox { height: 200px; overflow-y: auto; background: rgba(255,255,255,0.1); padding: 10px; text-align: left; }
+        .player-item { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #444; }
+        .dead { text-decoration: line-through; color: #777; }
+        button { padding: 8px 15px; border-radius: 5px; border: none; cursor: pointer; font-weight: bold; }
+        .btn-kick { background: #e94560; color: white; font-size: 10px; }
+        .btn-action { background: #f1c40f; color: #333; font-size: 10px; margin-left: 5px; }
+        input { padding: 10px; width: 80%; border-radius: 5px; border: none; margin: 5px 0; }
     </style>
 </head>
 <body>
-    <div id="setup" class="container">
-        <h1>🐺 狼人殺村莊</h1>
+    <div id="setup">
+        <h2>🐺 狼人殺：加入村莊</h2>
         <input type="text" id="roomInput" placeholder="輸入房間號碼 (例如: 888)">
         <input type="text" id="username" placeholder="你的暱稱">
-        <button onclick="join()" class="btn-start">進入房間</button>
+        <button onclick="join()" style="background:#27ae60; color:white; width:85%; margin-top:10px;">進入房間</button>
     </div>
 
     <main id="game" class="hidden">
         <section>
-            <h2 id="roomTitle">房間：<span id="displayRoom"></span></h2>
-            <div id="myRole" style="font-size:24px; color:#f1c40f; margin-bottom:10px;">⏳ 等待房長開始遊戲...</div>
-            <button id="startBtn" class="hidden" onclick="start()">開始遊戲</button>
+            <div id="roomTitle">房間：<span id="displayRoom" style="color:#f1c40f;"></span></div>
+            <div id="myRole" style="font-size:24px; color:#f1c40f; margin:10px 0;">⏳ 等待發牌...</div>
+            <button id="startBtn" class="hidden" onclick="start()" style="background:#27ae60; color:white; width:100%;">開始遊戲 (至少6人)</button>
         </section>
 
         <section>
-            <h3>村莊名單 (<span id="aliveCount">0</span>)</h3>
+            <h3>玩家列表 (<span id="pCount">0</span>)</h3>
             <div id="playerList"></div>
         </section>
 
         <section>
             <div id="chatBox"></div>
-            <div style="display: flex; gap: 5px;">
-                <input type="text" id="chatInput" placeholder="說點什麼..." style="flex: 1; margin: 0;">
-                <button onclick="send()" style="background:#e94560; color:white;">送出</button>
-            </div>
+            <input type="text" id="chatInput" placeholder="輸入訊息..."><button onclick="send()" style="background:#e94560; color:white;">送出</button>
         </section>
     </main>
 
     <script>
         const socket = io("https://were-wolf.onrender.com");
-        let myName = "", amIHost = false;
+        let myName = "", amIHost = false, myRole = "";
 
         function join() {
-            const roomId = document.getElementById("roomInput").value;
+            const r = document.getElementById("roomInput").value;
             myName = document.getElementById("username").value;
-            if(roomId && myName) {
-                socket.emit('joinRoom', { roomId, username: myName });
-                document.getElementById("displayRoom").innerText = roomId;
+            if(r && myName) {
+                socket.emit('joinRoom', { roomId: r, username: myName });
+                document.getElementById("displayRoom").innerText = r;
             }
         }
 
         socket.on('updatePlayers', ({ players, status }) => {
             document.getElementById("setup").classList.add("hidden");
             document.getElementById("game").classList.remove("hidden");
-            
+            document.getElementById("pCount").innerText = players.length;
+
             const list = document.getElementById("playerList");
             list.innerHTML = "";
-            let aliveNum = 0;
-
             players.forEach(p => {
-                if(p.isAlive) aliveNum++;
                 const div = document.createElement("div");
                 div.className = `player-item ${!p.isAlive ? 'dead' : ''}`;
-                div.innerHTML = `<span>${p.isHost ? '👑' : '👤'} ${p.name} ${!p.isAlive ? '(淘汰)' : ''}</span>`;
+                div.innerHTML = `<span>${p.isHost ? '👑' : ''} ${p.name} ${!p.isAlive ? '(淘汰)' : ''}</span>`;
                 
-                // 房長踢人邏輯
+                // 房長在等待廳可以踢人
                 if(amIHost && status === 'waiting' && p.id !== socket.id) {
-                    const kBtn = document.createElement("button");
-                    kBtn.innerText = "踢出";
-                    kBtn.className = "btn-kick";
-                    kBtn.onclick = () => socket.emit('kickPlayer', p.id);
-                    div.appendChild(kBtn);
+                    const btn = document.createElement("button");
+                    btn.innerText = "踢出"; btn.className = "btn-kick";
+                    btn.onclick = () => socket.emit('kickPlayer', p.id);
+                    div.appendChild(btn);
+                }
+                // 預言家功能
+                if(myRole === '預言家' && status === 'playing' && p.id !== socket.id && p.isAlive) {
+                    const btn = document.createElement("button");
+                    btn.innerText = "查驗"; btn.className = "btn-action";
+                    btn.onclick = () => socket.emit('checkRole', p.id);
+                    div.appendChild(btn);
                 }
                 list.appendChild(div);
             });
-            document.getElementById("aliveCount").innerText = aliveNum;
 
-            // 房長開始按鈕狀態
             if(amIHost && status === 'waiting') {
-                const sBtn = document.getElementById("startBtn");
-                sBtn.classList.remove("hidden");
-                if (players.length < 6) {
-                    sBtn.disabled = true;
-                    sBtn.style.background = "#555";
-                    sBtn.innerText = `人數不足 (${players.length}/6)`;
-                } else {
-                    sBtn.disabled = false;
-                    sBtn.style.background = "#27ae60";
-                    sBtn.innerText = "人數已齊全，開始發牌";
-                }
-            } else {
-                document.getElementById("startBtn").classList.add("hidden");
+                const b = document.getElementById("startBtn");
+                b.classList.remove("hidden");
+                b.disabled = players.length < 6;
+                b.style.opacity = players.length < 6 ? "0.5" : "1";
             }
         });
 
         socket.on('assignRole', (role) => {
-            document.getElementById("myRole").innerText = "你的身分：" + role;
+            myRole = role;
+            document.getElementById("myRole").innerText = "身分：" + role;
             document.body.classList.add("night");
         });
 
-        socket.on('gameOver', (data) => {
-            const result = `🎉 遊戲結束！【${data.winner}】勝利！\n\n公布身分：\n` + 
-                           data.allRoles.map(p => `${p.name}: ${p.role}`).join('\n');
-            alert(result);
-            location.reload(); 
+        socket.on('checkResult', r => alert(r));
+        socket.on('gameOver', d => {
+            alert(`🎉 ${d.winner} 勝利！\n\n公布身分：\n` + d.allRoles.map(p => `${p.name}: ${p.role}`).join('\n'));
+            location.reload();
         });
 
         socket.on('hostStatus', s => amIHost = s);
         socket.on('errorMessage', m => alert(m));
         function start() { socket.emit('startGame'); }
         function send() { 
-            const msg = document.getElementById("chatInput").value;
-            if(msg) { socket.emit('sendMessage', { name: myName, text: msg }); document.getElementById("chatInput").value = ""; }
+            const i = document.getElementById("chatInput");
+            if(i.value) { socket.emit('sendMessage', { name: myName, text: i.value }); i.value = ""; }
         }
         socket.on('receiveMessage', d => {
             const b = document.getElementById("chatBox");
             b.innerHTML += `<div><b>${d.name}:</b> ${d.text}</div>`;
             b.scrollTop = b.scrollHeight;
         });
-        document.getElementById("chatInput").addEventListener("keypress", (e) => { if(e.key === "Enter") send(); });
     </script>
 </body>
 </html>
