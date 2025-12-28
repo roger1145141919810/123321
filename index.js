@@ -67,3 +67,87 @@ io.on('connection', (socket) => {
             syncWolfUI(room);
         }
     });
+socket.on('wolfConfirm', () => {
+        const room = rooms[socket.roomId];
+        if (room?.status === 'night_wolf') {
+            room.nightAction.wolfConfirmations[socket.id] = true;
+            
+            // 機器人行為：如果有機器人也是狼人，讓它們自動跟隨第一個鎖定的人
+            const aliveWolves = room.players.filter(p => p.role === '狼人' && p.isAlive);
+            const targetId = room.nightAction.wolfVotes[socket.id]; // 獲取目前玩家選的目標
+
+            aliveWolves.forEach(w => {
+                if (w.isBot) {
+                    room.nightAction.wolfVotes[w.id] = targetId;
+                    room.nightAction.wolfConfirmations[w.id] = true;
+                }
+            });
+
+            // 再次計算共識
+            const confirms = aliveWolves.filter(w => room.nightAction.wolfConfirmations[w.id]);
+            const votes = aliveWolves.map(w => room.nightAction.wolfVotes[w.id]);
+            const uniqueVotes = [...new Set(votes.filter(v => v !== null))];
+
+            if (confirms.length === aliveWolves.length && uniqueVotes.length === 1) {
+                room.nightAction.finalKilledId = uniqueVotes[0];
+                triggerWitchPhase(socket.roomId);
+            } else {
+                syncWolfUI(room);
+            }
+        }
+    });
+
+    function triggerWitchPhase(roomId) {
+        const room = rooms[roomId];
+        if (room.status !== 'night_wolf') return; 
+        const witch = room.players.find(p => p.role === '女巫' && p.isAlive);
+        if (witch) io.to(witch.id).emit('witchTarget', { name: room.players.find(p => p.id === room.nightAction.finalKilledId)?.name || "無人死亡" });
+        room.status = 'night_witch'; broadcastUpdate(roomId);
+        
+        // 如果女巫是機器人，3秒後自動跳過行動
+        if (witch?.isBot) {
+            setTimeout(() => {
+                room.status = 'night_seer'; broadcastUpdate(roomId);
+                startSeerTimer(roomId);
+            }, 3000);
+        } else {
+            startTimer(roomId, 20, () => {
+                room.status = 'night_seer'; broadcastUpdate(roomId);
+                startSeerTimer(roomId);
+            });
+        }
+    }
+
+    function startSeerTimer(roomId) {
+        startTimer(roomId, 20, () => settleNight(roomId));
+    }
+
+    function triggerNight(roomId) {
+        const room = rooms[roomId];
+        room.status = 'night_wolf';
+        room.nightAction = { wolfVotes: {}, wolfConfirmations: {}, finalKilledId: null, savedId: null, poisonedId: null };
+        broadcastUpdate(roomId);
+        startTimer(roomId, 40, () => triggerWitchPhase(roomId));
+    }
+
+    // ... 其餘 witchAction, checkRole, settleNight, startTimer 保持不變 ...
+    // 請延用之前版本中 settleNight 以後的程式碼
+
+    function syncWolfUI(room) {
+        const aliveWolves = room.players.filter(p => p.role === '狼人' && p.isAlive);
+        const data = aliveWolves.map(w => ({ id: w.id, targetId: room.nightAction.wolfVotes[w.id] || null, isConfirmed: !!room.nightAction.wolfConfirmations[w.id] }));
+        aliveWolves.forEach(w => {
+            if (!w.isBot) io.to(w.id).emit('updateWolfUI', data);
+        });
+    }
+
+    function broadcastUpdate(roomId) {
+        const r = rooms[roomId];
+        if (!r) return;
+        io.to(roomId).emit('updatePlayers', { players: r.players, status: r.status, witchPotions: { hasSave: r.witchHasSave, hasPoison: r.witchHasPoison } });
+    }
+
+    socket.on('sendMessage', (d) => io.to(socket.roomId).emit('receiveMessage', d));
+    // ... 斷線與遊戲結束判斷 ...
+});
+server.listen(process.env.PORT || 3000);
