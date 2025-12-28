@@ -3,69 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🐺 終極狼人殺法官</title>
+    <title>🐺 狼人殺法官系統</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #2c3e50; color: white; text-align: center; margin: 0; }
-        .night { background: #1a1a2e !important; }
-        section { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 10px; margin: 10px auto; max-width: 500px; }
+        body { font-family: sans-serif; background: #2c3e50; color: white; text-align: center; margin: 0; transition: 0.5s; }
+        .night { background: #1a1a2e !important; color: #e94560 !important; }
+        section { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 10px; margin: 10px auto; max-width: 500px; border: 1px solid rgba(255,255,255,0.1); }
         .hidden { display: none; }
-        #chatBox { height: 150px; overflow-y: auto; background: rgba(0,0,0,0.2); margin: 10px 0; padding: 10px; text-align: left; }
-        .player-item { display: flex; justify-content: space-between; padding: 5px; border-bottom: 1px solid #444; }
-        .dead { text-decoration: line-through; color: #888; }
-        button { cursor: pointer; border-radius: 5px; border: none; padding: 8px; }
-        .btn-kick { background: #ff4d4d; color: white; font-size: 10px; }
-        .btn-start { background: #27ae60; color: white; width: 100%; font-size: 18px; }
+        #chatBox { height: 180px; overflow-y: auto; background: rgba(0,0,0,0.2); margin: 10px 0; padding: 10px; text-align: left; border-radius: 5px; }
+        .player-item { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #444; align-items: center; }
+        .dead { text-decoration: line-through; color: #888; opacity: 0.6; }
+        button { cursor: pointer; border-radius: 5px; border: none; padding: 8px 15px; font-weight: bold; }
+        .btn-kick { background: #ff4d4d; color: white; padding: 5px 10px; font-size: 12px; }
+        .btn-start { background: #27ae60; color: white; width: 100%; font-size: 18px; margin-top: 10px; }
+        input { padding: 10px; width: 80%; border-radius: 5px; border: none; margin-bottom: 10px; }
     </style>
 </head>
 <body>
     <div id="setup" class="container">
-        <h1>🐺 狼人殺大廳</h1>
-        <input type="text" id="roomInput" placeholder="房間號碼"><br>
-        <input type="text" id="username" placeholder="你的暱稱"><br>
-        <button onclick="join()" class="btn-start" style="margin-top:10px;">進入房間</button>
+        <h1>🐺 狼人殺村莊</h1>
+        <input type="text" id="roomInput" placeholder="輸入房間號碼 (例如: 888)">
+        <input type="text" id="username" placeholder="你的暱稱">
+        <button onclick="join()" class="btn-start">進入房間</button>
     </div>
 
     <main id="game" class="hidden">
         <section>
-            <h2 id="roomTitle">房間</h2>
-            <div id="myRole" style="font-size:24px; color:#f1c40f;">等待開始...</div>
+            <h2 id="roomTitle">房間：<span id="displayRoom"></span></h2>
+            <div id="myRole" style="font-size:24px; color:#f1c40f; margin-bottom:10px;">⏳ 等待房長開始遊戲...</div>
             <button id="startBtn" class="hidden" onclick="start()">開始遊戲</button>
         </section>
 
         <section>
-            <h3>村莊名單</h3>
+            <h3>村莊名單 (<span id="aliveCount">0</span>)</h3>
             <div id="playerList"></div>
         </section>
 
         <section>
             <div id="chatBox"></div>
-            <input type="text" id="chatInput" placeholder="輸入訊息..."><button onclick="send()">送出</button>
+            <div style="display: flex; gap: 5px;">
+                <input type="text" id="chatInput" placeholder="說點什麼..." style="flex: 1; margin: 0;">
+                <button onclick="send()" style="background:#e94560; color:white;">送出</button>
+            </div>
         </section>
     </main>
 
     <script>
         const socket = io("https://were-wolf.onrender.com");
-        let myName = "", amIHost = false, currentStatus = 'waiting';
+        let myName = "", amIHost = false;
 
         function join() {
             const roomId = document.getElementById("roomInput").value;
             myName = document.getElementById("username").value;
-            if(roomId && myName) socket.emit('joinRoom', { roomId, username: myName });
+            if(roomId && myName) {
+                socket.emit('joinRoom', { roomId, username: myName });
+                document.getElementById("displayRoom").innerText = roomId;
+            }
         }
 
         socket.on('updatePlayers', ({ players, status }) => {
             document.getElementById("setup").classList.add("hidden");
             document.getElementById("game").classList.remove("hidden");
-            currentStatus = status;
             
             const list = document.getElementById("playerList");
             list.innerHTML = "";
+            let aliveNum = 0;
+
             players.forEach(p => {
+                if(p.isAlive) aliveNum++;
                 const div = document.createElement("div");
                 div.className = `player-item ${!p.isAlive ? 'dead' : ''}`;
-                div.innerHTML = `<span>${p.isHost ? '👑' : ''} ${p.name} ${!p.isAlive ? '(淘汰)' : ''}</span>`;
+                div.innerHTML = `<span>${p.isHost ? '👑' : '👤'} ${p.name} ${!p.isAlive ? '(淘汰)' : ''}</span>`;
                 
+                // 房長踢人邏輯
                 if(amIHost && status === 'waiting' && p.id !== socket.id) {
                     const kBtn = document.createElement("button");
                     kBtn.innerText = "踢出";
@@ -75,12 +85,21 @@
                 }
                 list.appendChild(div);
             });
+            document.getElementById("aliveCount").innerText = aliveNum;
 
+            // 房長開始按鈕狀態
             if(amIHost && status === 'waiting') {
                 const sBtn = document.getElementById("startBtn");
                 sBtn.classList.remove("hidden");
-                sBtn.disabled = players.length < 6;
-                sBtn.innerText = players.length < 6 ? `人數不足(${players.length}/6)` : "開始遊戲";
+                if (players.length < 6) {
+                    sBtn.disabled = true;
+                    sBtn.style.background = "#555";
+                    sBtn.innerText = `人數不足 (${players.length}/6)`;
+                } else {
+                    sBtn.disabled = false;
+                    sBtn.style.background = "#27ae60";
+                    sBtn.innerText = "人數已齊全，開始發牌";
+                }
             } else {
                 document.getElementById("startBtn").classList.add("hidden");
             }
@@ -92,10 +111,13 @@
         });
 
         socket.on('gameOver', (data) => {
-            alert(`🎉 遊戲結束！${data.winner} 勝利！\n\n公布身分：\n` + data.allRoles.map(p => `${p.name}: ${p.role}`).join('\n'));
+            const result = `🎉 遊戲結束！【${data.winner}】勝利！\n\n公布身分：\n` + 
+                           data.allRoles.map(p => `${p.name}: ${p.role}`).join('\n');
+            alert(result);
             location.reload(); 
         });
 
+        socket.on('hostStatus', s => amIHost = s);
         socket.on('errorMessage', m => alert(m));
         function start() { socket.emit('startGame'); }
         function send() { 
@@ -107,6 +129,7 @@
             b.innerHTML += `<div><b>${d.name}:</b> ${d.text}</div>`;
             b.scrollTop = b.scrollHeight;
         });
+        document.getElementById("chatInput").addEventListener("keypress", (e) => { if(e.key === "Enter") send(); });
     </script>
 </body>
 </html>
