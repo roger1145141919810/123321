@@ -40,7 +40,7 @@
     <main id="game" class="hidden">
         <section>
             <div style="margin-bottom: 5px;">當前階段：<span id="gamePhase" style="color:var(--accent-gold); font-weight:bold;">等待中</span></div>
-            <div id="myRole" style="font-size: 1.4em; margin: 10px 0; font-weight: bold;">⏳ 分配中...</div>
+            <div id="myRole" style="font-size: 1.4em; margin: 10px 0; font-weight: bold;">⏳ 等待發牌...</div>
             <div id="timerDisplay" class="day-timer">--:--</div>
             <div id="nightNotice" style="color: var(--accent-gold); font-size: 15px; min-height: 24px; font-weight: bold;"></div>
             
@@ -102,8 +102,19 @@
             const isNight = status.startsWith('night');
             document.body.className = isNight ? "night-mode" : (status === 'day' ? "day-mode" : "");
             document.getElementById("timerDisplay").className = isNight ? "night-timer" : "day-timer";
+            
+            // 房主控制按鈕僅在等待階段顯示
             document.getElementById("hostControls").classList.toggle("hidden", !amIHost || status !== 'waiting');
             
+            if (status === 'waiting') {
+                // 重置所有遊戲中的視覺提示
+                document.getElementById("myRole").innerText = "⏳ 等待發牌...";
+                document.getElementById("myRole").style.color = "white";
+                document.getElementById("nightNotice").innerText = "";
+                document.getElementById("timerDisplay").innerText = "--:--";
+                myRole = null; // 清除本地身分緩存
+            }
+
             if (!isNight && status !== 'waiting') document.getElementById("nightNotice").innerText = "";
 
             renderList(players, status);
@@ -131,7 +142,7 @@
                 
                 // 狼人小紅點
                 let dots = '<div class="vote-indicator">';
-                if (myRole === '狼人') {
+                if (myRole === '狼人' && status.startsWith('night')) {
                     wolfStatusData.filter(v => v.targetId === p.id).forEach(v => {
                         dots += `<div class="wolf-dot" style="${v.isConfirmed ? 'box-shadow: 0 0 8px #f1c40f; border-color:#f1c40f;' : ''}"></div>`;
                     });
@@ -140,12 +151,11 @@
 
                 // 行動按鈕邏輯
                 let btns = `<div>`;
-                if (isAlive && p.isAlive) {
+                if (isAlive && p.isAlive && status !== 'waiting') {
                     if (status === 'night_wolf' && myRole === '狼人') 
                         btns += `<button class="action-btn" style="background:var(--primary-red)" onclick="socket.emit('wolfKill','${p.id}')">選</button>`;
                     
                     if (status === 'night_witch' && myRole === '女巫') {
-                        // 復活藥僅在有藥水時顯示
                         if(witchPotions.hasSave) btns += `<button class="action-btn" style="background:var(--primary-green)" onclick="socket.emit('witchAction',{type:'save',targetId:'${p.id}'})">救</button>`;
                         if(witchPotions.hasPoison) btns += `<button class="action-btn" style="background:#8e44ad" onclick="socket.emit('witchAction',{type:'poison',targetId:'${p.id}'})">毒</button>`;
                     }
@@ -165,7 +175,6 @@
                 list.appendChild(div);
             });
 
-            // 狼人確認按鈕
             if (status === 'night_wolf' && myRole === '狼人' && isAlive) {
                 const myV = wolfStatusData.find(v => v.id === socket.id);
                 const b = document.createElement("button");
@@ -177,7 +186,7 @@
             }
 
             document.getElementById("skipBtn").classList.toggle("hidden", status !== 'day' || !isAlive);
-            document.getElementById("wolfSection").classList.toggle("hidden", myRole !== '狼人');
+            document.getElementById("wolfSection").classList.toggle("hidden", myRole !== '狼人' || status === 'waiting');
         }
 
         socket.on('assignRole', r => { 
@@ -187,7 +196,6 @@
             el.style.color = (r === '狼人' ? 'var(--primary-red)' : 'var(--primary-green)');
         });
 
-        // 計時器顯示 mm:ss
         socket.on('timerUpdate', s => {
             const timerEl = document.getElementById("timerDisplay");
             if (s >= 60) {
@@ -217,9 +225,14 @@
 
         socket.on('checkResult', m => alert(m));
         socket.on('errorMessage', m => alert(m));
+
         socket.on('gameOver', d => { 
-            alert("遊戲結束！贏家是：" + d.winner); 
-            location.reload(); 
+            setTimeout(() => {
+                alert("遊戲結束！\n贏家是：" + d.winner + "\n\n房號仍有效，原班人馬可繼續進行下一局。"); 
+            }, 500);
+            // 移除 location.reload();
+            myRole = null;
+            wolfStatusData = [];
         });
 
         function send() { 
