@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🐺 狼人殺：終極連線版</title>
+    <title>🐺 狼人殺：連線版</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         :root {
@@ -39,7 +39,7 @@
         .is-wolf { color: var(--primary-red) !important; font-weight: bold; }
 
         .action-btn {
-            padding: 4px 8px; font-size: 11px; border-radius: 4px; border: none;
+            padding: 6px 10px; font-size: 12px; border-radius: 4px; border: none;
             cursor: pointer; margin-left: 4px; color: white;
         }
         .btn-kill { background: #c0392b; }
@@ -62,7 +62,7 @@
             <h2 style="color: var(--accent-gold);">🐺 狼人殺</h2>
             <input type="text" id="roomInput" placeholder="房間號碼" style="width:70%;">
             <input type="text" id="username" placeholder="你的暱稱" style="width:70%; margin-top:5px;">
-            <button onclick="join()" style="width:75%; background:var(--primary-green); color:white; padding:10px; margin-top:10px; border-radius:8px; border:none;">進入房間</button>
+            <button onclick="join()" style="width:75%; background:var(--primary-green); color:white; padding:10px; margin-top:10px; border-radius:8px; border:none; cursor:pointer;">進入房間</button>
         </section>
     </div>
 
@@ -72,37 +72,38 @@
             <div id="myRole">⏳ 等待發牌...</div>
             <div id="timerDisplay" style="font-size: 18px; color: var(--primary-red); font-weight: bold;">--:--</div>
             
-            <button id="skipBtn" class="hidden" onclick="socket.emit('castSkipVote')" style="background:#3498db; color:white; padding:8px 15px; border-radius:5px; border:none; margin-top:5px;">⏭️ 跳過發言</button>
-            <button id="startBtn" class="hidden" onclick="socket.emit('startGame')" style="background:var(--primary-green); color:white; padding:8px 15px; border-radius:5px; border:none;">開始遊戲</button>
+            <button id="skipBtn" class="hidden" onclick="socket.emit('castSkipVote')" style="background:#3498db; color:white; padding:8px 15px; border-radius:5px; border:none; margin-top:5px; cursor:pointer;">⏭️ 跳過發言</button>
+            <button id="startBtn" class="hidden" onclick="socket.emit('startGame')" style="background:var(--primary-green); color:white; padding:8px 15px; border-radius:5px; border:none; cursor:pointer;">開始遊戲</button>
         </section>
 
         <section id="wolfSection" class="hidden">
-            <div style="color:var(--primary-red); font-size:12px; font-weight:bold; margin-bottom:5px;">🐺 狼人私密頻道 (隊友可見)</div>
+            <div style="color:var(--primary-red); font-size:12px; font-weight:bold; margin-bottom:5px;">🐺 狼人私密頻道</div>
             <div id="wolfChatBox" class="chat-area"></div>
             <div style="display:flex; gap:5px;">
-                <input type="text" id="wolfInput" placeholder="商量戰術..." style="flex:1;">
-                <button onclick="sendWolfChat()" style="background:var(--primary-red); color:white; border:none; padding:5px 10px; border-radius:5px;">傳送</button>
+                <input type="text" id="wolfInput" placeholder="討論戰術..." style="flex:1;">
+                <button onclick="sendWolfChat()" style="background:var(--primary-red); color:white; border:none; padding:5px 10px; border-radius:5px; cursor:pointer;">傳送</button>
             </div>
         </section>
 
         <section>
             <h3>村莊名單</h3>
             <div id="playerList"></div>
-            <button id="abstainBtn" class="hidden" onclick="socket.emit('castVote', null)" style="width:100%; margin-top:10px; background:#7f8c8d; color:white; border:none; padding:5px; border-radius:5px;">🗳️ 棄票 (不處決任何人)</button>
+            <button id="abstainBtn" class="hidden" onclick="vote(null)" style="width:100%; margin-top:10px; background:#7f8c8d; color:white; border:none; padding:8px; border-radius:5px; cursor:pointer;">🗳️ 棄票</button>
         </section>
 
         <section>
             <div id="chatBox" class="chat-area"></div>
             <div style="display:flex; gap:10px;">
-                <input type="text" id="chatInput" placeholder="輸入訊息..." style="flex:1;">
-                <button id="sendBtn" onclick="send()" style="background:var(--primary-red); color:white; padding:8px 15px; border:none; border-radius:5px;">送出</button>
+                <input type="text" id="chatInput" placeholder="輸入訊息..." style="flex:1;" onkeypress="if(event.key==='Enter') send()">
+                <button id="sendBtn" onclick="send()" style="background:var(--primary-red); color:white; padding:8px 15px; border:none; border-radius:5px; cursor:pointer;">送出</button>
             </div>
         </section>
     </main>
 
     <script>
+        // 修改為你的後端網址
         const socket = io("https://were-wolf.onrender.com");
-        let myName = "", amIHost = false, myRole = null, isAlive = true, wolfList = [];
+        let myName = "", amIHost = false, myRole = null, isAlive = true;
 
         function join() {
             const r = document.getElementById("roomInput").value;
@@ -114,14 +115,16 @@
             document.getElementById("setup").classList.add("hidden");
             document.getElementById("game").classList.remove("hidden");
             
-            const me = players.find(p => p.name === myName);
-            if(me) { isAlive = me.isAlive; }
+            const me = players.find(p => p.id === socket.id);
+            if(me) { 
+                isAlive = me.isAlive;
+                amIHost = me.isHost; // 同步房長狀態
+            }
 
             // 1. 處理階段 UI
             const phaseMap = { 'waiting':'等待中', 'night':'🌙 黑夜行動', 'day':'☀️ 白天發言', 'voting':'🗳️ 投票中' };
             document.getElementById("gamePhase").innerText = phaseMap[status] || '進行中';
             
-            // 背景與禁言邏輯
             if(status === 'night') {
                 document.body.classList.add("night-mode");
                 document.getElementById("chatInput").disabled = true;
@@ -132,10 +135,9 @@
                 document.getElementById("chatInput").placeholder = isAlive ? "輸入訊息..." : "你已淘汰...";
             }
 
-            // 2. 角色與狼人頻道
+            // 2. 角色面板顯示
             if (myRole === '狼人') {
                 document.getElementById("wolfSection").classList.remove("hidden");
-                wolfList = players.filter(p => p.role === '狼人').map(p => p.id);
             }
 
             // 3. 渲染名單
@@ -145,71 +147,73 @@
                 const div = document.createElement("div");
                 div.className = `player-item ${!p.isAlive ? 'dead' : ''}`;
                 
-                // 標示隊友
+                // 狼人隊友標紅
                 const nameClass = (myRole === '狼人' && p.role === '狼人') ? 'is-wolf' : '';
-                let html = `<span class="${nameClass}">${p.name} ${!p.isAlive ? '(淘汰)' : ''}</span><div>`;
+                let html = `<span>${p.isHost ? '👑' : ''} <span class="${nameClass}">${p.name}</span> ${!p.isAlive ? '(淘汰)' : ''}</span><div>`;
 
-                // 黑夜按鈕
-                if (status === 'night' && isAlive && p.isAlive && p.id !== socket.id) {
-                    if (myRole === '狼人') html += `<button class="action-btn btn-kill" onclick="socket.emit('wolfKill','${p.id}')">擊殺</button>`;
-                    if (myRole === '預言家') html += `<button class="action-btn" style="background:#8e44ad" onclick="socket.emit('checkRole','${p.id}')">查驗</button>`;
-                    if (myRole === '女巫') html += `<button class="action-btn" style="background:#27ae60" onclick="socket.emit('witchAction',{type:'poison',targetId:'${p.id}'})">毒人</button>`;
-                }
-                
-                // 投票按鈕
-                if (status === 'voting' && isAlive && p.isAlive) {
-                    html += `<button class="action-btn btn-vote" onclick="vote('${p.id}')">投給他</button>`;
+                if (isAlive && p.isAlive) {
+                    // 黑夜按鈕
+                    if (status === 'night' && p.id !== socket.id) {
+                        if (myRole === '狼人') html += `<button class="action-btn btn-kill" onclick="socket.emit('wolfKill','${p.id}')">擊殺</button>`;
+                        if (myRole === '預言家') html += `<button class="action-btn" style="background:#8e44ad" onclick="socket.emit('checkRole','${p.id}')">查驗</button>`;
+                        if (myRole === '女巫') html += `<button class="action-btn" style="background:#27ae60" onclick="socket.emit('witchAction',{type:'poison',targetId:'${p.id}'})">毒人</button>`;
+                    }
+                    // 投票按鈕
+                    if (status === 'voting') {
+                        html += `<button class="action-btn btn-vote" onclick="vote('${p.id}')">投他</button>`;
+                    }
                 }
 
                 div.innerHTML = html + `</div>`;
                 list.appendChild(div);
             });
 
-            // 4. 控制按鈕隱藏
+            // 4. 控制按鈕與房長邏輯
             document.getElementById("skipBtn").classList.toggle("hidden", status !== 'day' || !isAlive);
             document.getElementById("abstainBtn").classList.toggle("hidden", status !== 'voting' || !isAlive);
             
+            const startBtn = document.getElementById("startBtn");
             if(amIHost && status === 'waiting') {
-                document.getElementById("startBtn").classList.remove("hidden");
-                document.getElementById("startBtn").disabled = (players.length < 6);
+                startBtn.classList.remove("hidden");
+                startBtn.disabled = (players.length < 6);
             } else {
-                document.getElementById("startBtn").classList.add("hidden");
+                startBtn.classList.add("hidden");
             }
         });
 
-        // 投票並自動隱藏按鈕
         function vote(id) {
             socket.emit('castVote', id);
-            document.getElementById("playerList").innerHTML = "<h4>已送出投票，等待其他人...</h4>";
+            document.getElementById("playerList").innerHTML = "<h4 style='color:var(--accent-gold)'>✅ 投票已送出，等待結果...</h4>";
             document.getElementById("abstainBtn").classList.add("hidden");
         }
 
         socket.on('assignRole', (role) => {
             myRole = role;
             document.getElementById("myRole").innerText = "身分：" + role;
+            document.getElementById("myRole").style.color = (role === '狼人' ? 'var(--primary-red)' : 'var(--primary-green)');
         });
 
-        // 聊天邏輯
         function send() {
             const i = document.getElementById("chatInput");
-            if(i.value) socket.emit('sendMessage', { name: myName, text: i.value });
+            if(i.value && isAlive) socket.emit('sendMessage', { name: myName, text: i.value });
             i.value = "";
         }
+
         function sendWolfChat() {
             const i = document.getElementById("wolfInput");
-            if(i.value) socket.emit('sendWolfMessage', { name: myName, text: i.value });
+            if(i.value && isAlive) socket.emit('sendWolfMessage', { name: myName, text: i.value });
             i.value = "";
         }
 
         socket.on('receiveMessage', d => {
             const b = document.getElementById("chatBox");
-            b.innerHTML += `<div><b>${d.name}:</b> ${d.text}</div>`;
+            b.innerHTML += `<div><b style="color:#3498db">${d.name}:</b> ${d.text}</div>`;
             b.scrollTop = b.scrollHeight;
         });
 
         socket.on('receiveWolfMessage', d => {
             const b = document.getElementById("wolfChatBox");
-            b.innerHTML += `<div><b>${d.name}:</b> ${d.text}</div>`;
+            b.innerHTML += `<div><b style="color:var(--primary-red)">${d.name}:</b> ${d.text}</div>`;
             b.scrollTop = b.scrollHeight;
         });
 
@@ -219,9 +223,15 @@
         });
 
         socket.on('checkResult', m => alert(m));
-        socket.on('hostStatus', s => amIHost = s);
+        socket.on('hostStatus', s => { 
+            amIHost = s; 
+            // 房長變更時，觸發 updatePlayers 請求或提示
+        });
         socket.on('errorMessage', m => alert(m));
-        socket.on('gameOver', (d) => { alert("遊戲結束！贏家：" + d.winner); location.reload(); });
+        socket.on('gameOver', (d) => { 
+            alert("遊戲結束！贏家：" + d.winner); 
+            location.reload(); 
+        });
     </script>
 </body>
 </html>
