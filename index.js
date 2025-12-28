@@ -45,8 +45,9 @@ io.on('connection', (socket) => {
         }
         broadcastUpdate(socket.roomId);
     });
-// --- 機器人隨機行動邏輯 ---
-    function handleBotRandomActions(roomId, phase) {
+
+    // --- 機器人自動行動邏輯 ---
+    function handleBotActions(roomId, phase) {
         const room = rooms[roomId];
         if (!room) return;
 
@@ -61,35 +62,49 @@ io.on('connection', (socket) => {
                 room.nightAction.wolfConfirmations[bot.id] = true;
             }
 
-            // 2. 女巫機器人隨機用藥 (50% 機率使用)
+            // 2. 女巫機器人隨機用藥
             if (phase === 'night_witch' && bot.role === '女巫') {
                 if (room.witchHasSave && room.nightAction.finalKilledId && Math.random() > 0.5) {
                     room.nightAction.savedId = room.nightAction.finalKilledId;
                     room.witchHasSave = false;
                 } else if (room.witchHasPoison && Math.random() > 0.7) {
-                    const target = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
-                    room.nightAction.poisonedId = target.id;
-                    room.witchHasPoison = false;
+                    const target = alivePlayers.filter(p => p.role !== '狼人')[Math.floor(Math.random() * alivePlayers.length)];
+                    if(target) {
+                        room.nightAction.poisonedId = target.id;
+                        room.witchHasPoison = false;
+                    }
                 }
             }
 
-            // 3. 投票階段隨機投人
+            // 3. 白天自動跳過發言
+            if (phase === 'day' && room.status === 'day') {
+                room.skipVotes.add(bot.id);
+            }
+
+            // 4. 投票階段隨機投人
             if (phase === 'voting' && !room.votes[bot.id]) {
                 const target = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
                 room.votes[bot.id] = target.id;
             }
         });
 
-        // 狼人回合如果只有機器人，主動同步 UI 並檢查共識
+        // 結算邏輯觸發
         if (phase === 'night_wolf') {
             syncWolfUI(room);
             checkWolfConsensus(roomId);
+        } else if (phase === 'day') {
+            const required = Math.max(1, room.players.filter(p => p.isAlive).length - 1);
+            if (room.skipVotes.size >= required) startVoting(roomId);
+        } else if (phase === 'voting') {
+            const aliveCount = room.players.filter(p => p.isAlive).length;
+            if (Object.keys(room.votes).length >= aliveCount) settleVote(roomId);
         }
     }
 
-    // 輔助：檢查狼人是否達成共識
+    // 輔助：檢查狼人共識
     function checkWolfConsensus(roomId) {
         const room = rooms[roomId];
+        if (!room) return;
         const aliveWolves = room.players.filter(p => p.role === '狼人' && p.isAlive);
         const confirms = aliveWolves.filter(w => room.nightAction.wolfConfirmations[w.id]);
         const votes = aliveWolves.map(w => room.nightAction.wolfVotes[w.id]);
@@ -100,6 +115,7 @@ io.on('connection', (socket) => {
             triggerWitchPhase(roomId);
         }
     }
+
     // 開始遊戲
     socket.on('startGame', () => {
         const room = rooms[socket.roomId];
@@ -116,7 +132,6 @@ io.on('connection', (socket) => {
         triggerNight(socket.roomId);
     });
 
-    // 狼人行動
     socket.on('wolfKill', (targetId) => {
         const room = rooms[socket.roomId];
         if (room?.status === 'night_wolf') {
@@ -130,53 +145,45 @@ io.on('connection', (socket) => {
         const room = rooms[socket.roomId];
         if (room?.status === 'night_wolf') {
             room.nightAction.wolfConfirmations[socket.id] = true;
-            
             const aliveWolves = room.players.filter(p => p.role === '狼人' && p.isAlive);
             const myTarget = room.nightAction.wolfVotes[socket.id];
 
-            // 讓機器人狼人跟票並確認
             aliveWolves.forEach(w => {
                 if (w.isBot) {
                     room.nightAction.wolfVotes[w.id] = myTarget;
                     room.nightAction.wolfConfirmations[w.id] = true;
                 }
             });
-
-            const confirms = aliveWolves.filter(w => room.nightAction.wolfConfirmations[w.id]);
-            const votes = aliveWolves.map(w => room.nightAction.wolfVotes[w.id]);
-            const uniqueVotes = [...new Set(votes.filter(v => v !== null))];
-
-            if (confirms.length === aliveWolves.length && uniqueVotes.length === 1) {
-                room.nightAction.finalKilledId = uniqueVotes[0];
-                triggerWitchPhase(socket.roomId);
-            } else {
-                syncWolfUI(room);
-            }
+            checkWolfConsensus(socket.roomId);
         }
     });
 
-    // 遊戲流程控制
+    // 流程控制
     function triggerNight(roomId) {
         const room = rooms[roomId];
         if (!room) return;
         room.status = 'night_wolf';
         room.nightAction = { wolfVotes: {}, wolfConfirmations: {}, finalKilledId: null, savedId: null, poisonedId: null };
         broadcastUpdate(roomId);
+        
+        // 機器狼在 5 秒後行動
+        setTimeout(() => handleBotActions(roomId, 'night_wolf'), 5000);
         startTimer(roomId, 40, () => triggerWitchPhase(roomId));
     }
 
     function triggerWitchPhase(roomId) {
         const room = rooms[roomId];
         if (!room || room.status !== 'night_wolf') return;
-        
         room.status = 'night_witch';
         const witch = room.players.find(p => p.role === '女巫' && p.isAlive);
         if (witch && !witch.isBot) {
             const killedName = room.players.find(p => p.id === room.nightAction.finalKilledId)?.name || "無人死亡";
             io.to(witch.id).emit('witchTarget', { name: killedName });
         }
-        
         broadcastUpdate(roomId);
+        
+        // 機器女巫 3 秒後行動
+        setTimeout(() => handleBotActions(roomId, 'night_witch'), 3000);
         startTimer(roomId, 20, () => {
             room.status = 'night_seer';
             broadcastUpdate(roomId);
@@ -201,27 +208,13 @@ io.on('connection', (socket) => {
             room.status = 'day';
             room.skipVotes = new Set();
             broadcastUpdate(roomId);
+            
+            // 啟動白天發言倒計時
+            startTimer(roomId, 60, () => startVoting(roomId));
+            // 機器人 5 秒後自動點擊跳過
+            setTimeout(() => handleBotActions(roomId, 'day'), 5000);
         }
     }
-
-    // 其他基礎功能
-    socket.on('witchAction', ({ type, targetId }) => {
-        const room = rooms[socket.roomId];
-        if (room?.status === 'night_witch') {
-            if (type === 'save' && room.witchHasSave) { room.nightAction.savedId = targetId; room.witchHasSave = false; }
-            else if (type === 'poison' && room.witchHasPoison) { room.nightAction.poisonedId = targetId; room.witchHasPoison = false; }
-            broadcastUpdate(socket.roomId);
-        }
-    });
-
-    socket.on('castVote', (targetId) => {
-        const room = rooms[socket.roomId];
-        if (room?.status === 'voting') {
-            room.votes[socket.id] = targetId;
-            const aliveCount = room.players.filter(p => p.isAlive).length;
-            if (Object.keys(room.votes).length >= aliveCount) settleVote(socket.roomId);
-        }
-    });
 
     socket.on('castSkipVote', () => {
         const room = rooms[socket.roomId];
@@ -236,9 +229,13 @@ io.on('connection', (socket) => {
 
     function startVoting(roomId) {
         const room = rooms[roomId];
+        if(!room || room.status === 'voting') return;
         room.status = 'voting';
         room.votes = {};
         broadcastUpdate(roomId);
+        
+        // 機器人 10 秒後投票
+        setTimeout(() => handleBotActions(roomId, 'voting'), 10000);
         startTimer(roomId, 30, () => settleVote(roomId));
     }
 
@@ -257,6 +254,7 @@ io.on('connection', (socket) => {
         if (!checkGameOver(roomId)) triggerNight(roomId);
     }
 
+    // 工具函數
     function startTimer(roomId, time, cb) {
         if (roomTimers[roomId]) clearInterval(roomTimers[roomId]);
         let t = time;
