@@ -179,7 +179,15 @@ io.on('connection', (socket) => {
         const room = rooms[roomId];
         if (!room) return;
         room.status = 'night_wolf';
-        room.nightAction = { wolfVotes: {}, wolfConfirmations: {}, finalKilledId: null, savedId: null, poisonedId: null };
+        // 在這裡加入 seerChecked: false，確保每晚開始時都會重置狀態
+        room.nightAction = { 
+            wolfVotes: {}, 
+            wolfConfirmations: {}, 
+            finalKilledId: null, 
+            savedId: null, 
+            poisonedId: null,
+            seerChecked: false  // <--- 核心改動：重置預言家查驗狀態
+        };
         broadcastUpdate(roomId);
         setTimeout(() => handleBotActions(roomId, 'night_wolf'), 5000);
         startTimer(roomId, 40, () => triggerWitchPhase(roomId));
