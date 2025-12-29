@@ -114,6 +114,7 @@
                 document.getElementById("timerDisplay").innerText = "--:--";
                 myRole = null; 
                 wolfStatusData = [];
+                currentVotes = {}; // <--- 新增這一行，清空投票狀態
             }
 
             if (!isNight && status !== 'waiting') document.getElementById("nightNotice").innerText = "";
@@ -150,11 +151,12 @@
 
             players.forEach(p => {
                 const isMe = p.id === socket.id;
-                const isMe = p.id === socket.id;
-                const myVoteTargetId = currentVotes[socket.id]; // 獲取我投的人的 ID
-                const isMyTarget = myVoteTargetId === p.id;    // 判斷這行是不是我投的人
+                // 修正：獲取我投的人，並定義是否為投票階段
+                const myVoteTargetId = currentVotes[socket.id]; 
+                const isMyTarget = myVoteTargetId === p.id;
+                const isVotingPhase = status === 'voting' || status === '投票放逐';
+
                 const div = document.createElement("div");
-                div.className = `player-item ${!p.isAlive ? 'dead' : ''} ${isMe ? 'is-me' : ''}`;
                 
                 let dots = '<div class="vote-indicator">';
                 if (myRole === '狼人' && isWolfPhase) {
