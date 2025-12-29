@@ -76,7 +76,8 @@
         let myName = "", myRole = null, amIHost = false, isAlive = true;
         let wolfStatusData = [], witchPotions = { hasSave: true, hasPoison: true };
         let lastPlayers = [];
-
+        let currentVotes = {};
+        
         function join() {
             myName = document.getElementById("username").value.trim();
             const r = document.getElementById("roomInput").value.trim();
@@ -149,6 +150,9 @@
 
             players.forEach(p => {
                 const isMe = p.id === socket.id;
+                const isMe = p.id === socket.id;
+                const myVoteTargetId = currentVotes[socket.id]; // 獲取我投的人的 ID
+                const isMyTarget = myVoteTargetId === p.id;    // 判斷這行是不是我投的人
                 const div = document.createElement("div");
                 div.className = `player-item ${!p.isAlive ? 'dead' : ''} ${isMe ? 'is-me' : ''}`;
                 
@@ -187,8 +191,9 @@
 
                 const roleClass = (myRole === '狼人' && p.role === '狼人') ? 'is-wolf' : '';
                 const nameTag = `${p.isHost ? '👑 ' : ''}${p.isBot ? '🤖 ' : ''}${p.name}${isMe ? ' (我)' : ''}`;
+                const voteTag = (isVotingPhase && isMyTarget) ? ' <span style="color:var(--accent-gold); font-size:12px;">🗳️ (已選)</span>' : '';
                 
-                div.innerHTML = `<span><span class="${roleClass}">${nameTag}</span>${dots}</span>${btns}`;
+                div.innerHTML = `<span><span class="${roleClass}">${nameTag}</span>${voteTag}${dots}</span>${btns}`;
                 list.appendChild(div);
             });
 
@@ -224,6 +229,13 @@
                 timerEl.innerText = s;
             }
         });
+        socket.on('updateVotes', (votes) => {
+    currentVotes = votes;
+    // 獲取當前階段，重新渲染列表
+    const currentPhaseText = document.getElementById("gamePhase").innerText;
+    const statusMap = { '等待開局':'waiting', '狼人行動':'night_wolf', '女巫行動':'night_witch', '預言家驗人':'night_seer', '自由發言':'day', '投票放逐':'voting' };
+    renderList(lastPlayers, statusMap[currentPhaseText] || 'voting');
+});
         socket.on('kicked', () => {
     alert("你已被房主移出房間");
     location.reload(); // 重新整理網頁回到登入畫面
