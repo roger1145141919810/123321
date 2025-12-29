@@ -138,81 +138,81 @@
         });
 
         function renderList(players, status) {
-            if(!players || players.length === 0) return;
-            const list = document.getElementById("playerList");
-            list.innerHTML = "";
-            
-            // 統一狀態代碼，避免 translateStatus 轉換後的文字造成判斷失敗
-            const isWolfPhase = status === 'night_wolf' || status === '狼人行動';
-            const isWitchPhase = status === 'night_witch' || status === '女巫行動';
-            const isSeerPhase = status === 'night_seer' || status === '預言家驗人';
-            const isVotingPhase = status === 'voting' || status === '投票放逐';
-            const isDayPhase = status === 'day' || status === '自由發言';
+    if(!players || players.length === 0) return;
+    const list = document.getElementById("playerList");
+    list.innerHTML = "";
+    
+    // 1. 統一狀態判斷
+    const isWolfPhase = status === 'night_wolf' || status === '狼人行動';
+    const isWitchPhase = status === 'night_witch' || status === '女巫行動';
+    const isSeerPhase = status === 'night_seer' || status === '預言家驗人';
+    const isVotingPhase = status === 'voting' || status === '投票放逐'; // 這裡定義一次就好
+    const isDayPhase = status === 'day' || status === '自由發言';
 
-            players.forEach(p => {
-                const isMe = p.id === socket.id;
-                // 修正：獲取我投的人，並定義是否為投票階段
-                const myVoteTargetId = currentVotes[socket.id]; 
-                const isMyTarget = myVoteTargetId === p.id;
-                const isVotingPhase = status === 'voting' || status === '投票放逐';
+    players.forEach(p => {
+        const isMe = p.id === socket.id;
+        
+        // 2. 修正：獲取我的投票目標 (不需要在此重複 const isVotingPhase)
+        const myVoteTargetId = currentVotes[socket.id]; 
+        const isMyTarget = myVoteTargetId === p.id;
 
-                const div = document.createElement("div");
-                
-                let dots = '<div class="vote-indicator">';
-                if (myRole === '狼人' && isWolfPhase) {
-                    wolfStatusData.filter(v => v.targetId === p.id).forEach(v => {
-                        dots += `<div class="wolf-dot" style="${v.isConfirmed ? 'box-shadow: 0 0 8px #f1c40f; border-color:#f1c40f;' : ''}"></div>`;
-                    });
-                }
-                dots += '</div>';
-
-                let btns = `<div>`;
-                if (amIHost && status === 'waiting' && !isMe && !p.isBot) {
-    btns += `<button class="action-btn" style="background:#666; font-size:10px;" onclick="socket.emit('kickPlayer','${p.id}')">踢出</button>`;
-}
-                if (isAlive && p.isAlive && status !== 'waiting' && status !== '等待開局') {
-                    // 狼人按鈕
-                    if (isWolfPhase && myRole === '狼人') 
-                        btns += `<button class="action-btn" style="background:var(--primary-red)" onclick="socket.emit('wolfKill','${p.id}')">選</button>`;
-                    
-                    // 女巫按鈕 (核心修正：確保判定條件包含 myRole)
-                    if (isWitchPhase && myRole === '女巫') {
-                        if(witchPotions.hasSave) btns += `<button class="action-btn" style="background:var(--primary-green)" onclick="socket.emit('witchAction',{type:'save',targetId:'${p.id}'})">救</button>`;
-                        if(witchPotions.hasPoison) btns += `<button class="action-btn" style="background:#8e44ad" onclick="socket.emit('witchAction',{type:'poison',targetId:'${p.id}'})">毒</button>`;
-                    }
-                    
-                    // 預言家按鈕
-                    if (isSeerPhase && myRole === '預言家' && !isMe) 
-                        btns += `<button class="action-btn" style="background:var(--me-blue)" onclick="socket.emit('checkRole','${p.id}')">驗</button>`;
-                    
-                    // 投票按鈕
-                    if (isVotingPhase && !isMe) 
-                        btns += `<button class="action-btn" style="background:var(--accent-gold)" onclick="socket.emit('castVote','${p.id}')">投</button>`;
-                }
-                btns += `</div>`;
-
-                const roleClass = (myRole === '狼人' && p.role === '狼人') ? 'is-wolf' : '';
-                const nameTag = `${p.isHost ? '👑 ' : ''}${p.isBot ? '🤖 ' : ''}${p.name}${isMe ? ' (我)' : ''}`;
-                const voteTag = (isVotingPhase && isMyTarget) ? ' <span style="color:var(--accent-gold); font-size:12px;">🗳️ (已選)</span>' : '';
-                
-                div.innerHTML = `<span><span class="${roleClass}">${nameTag}</span>${voteTag}${dots}</span>${btns}`;
-                list.appendChild(div);
+        const div = document.createElement("div");
+        div.className = `player-item ${!p.isAlive ? 'dead' : ''} ${isMe ? 'is-me' : ''}`; // 加上 CSS 類名
+        
+        let dots = '<div class="vote-indicator">';
+        if (myRole === '狼人' && isWolfPhase) {
+            wolfStatusData.filter(v => v.targetId === p.id).forEach(v => {
+                dots += `<div class="wolf-dot" style="${v.isConfirmed ? 'box-shadow: 0 0 8px #f1c40f; border-color:#f1c40f;' : ''}"></div>`;
             });
-
-            // 狼人確認
-            if (isWolfPhase && myRole === '狼人' && isAlive) {
-                const myV = wolfStatusData.find(v => v.id === socket.id);
-                const b = document.createElement("button");
-                b.innerText = myV?.isConfirmed ? "✅ 已確認殺害" : "🔒 確定此目標";
-                b.disabled = !myV?.targetId || myV?.isConfirmed;
-                b.onclick = () => socket.emit('wolfConfirm');
-                b.style = `width:100%; margin-top:10px; background:${myV?.isConfirmed?'#444':'var(--primary-red)'}; color:white; padding:12px; border:none; border-radius:8px; cursor:pointer; font-weight:bold;`;
-                list.appendChild(b);
-            }
-
-            document.getElementById("skipBtn").classList.toggle("hidden", !isDayPhase || !isAlive);
-            document.getElementById("wolfSection").classList.toggle("hidden", myRole !== '狼人' || status === 'waiting' || status === '等待開局');
         }
+        dots += '</div>';
+
+        let btns = `<div>`;
+        if (amIHost && status === 'waiting' && !isMe && !p.isBot) {
+            btns += `<button class="action-btn" style="background:#666; font-size:10px;" onclick="socket.emit('kickPlayer','${p.id}')">踢出</button>`;
+        }
+        
+        if (isAlive && p.isAlive && status !== 'waiting' && status !== '等待開局') {
+            if (isWolfPhase && myRole === '狼人') 
+                btns += `<button class="action-btn" style="background:var(--primary-red)" onclick="socket.emit('wolfKill','${p.id}')">選</button>`;
+            
+            if (isWitchPhase && myRole === '女巫') {
+                if(witchPotions.hasSave) btns += `<button class="action-btn" style="background:var(--primary-green)" onclick="socket.emit('witchAction',{type:'save',targetId:'${p.id}'})">救</button>`;
+                if(witchPotions.hasPoison) btns += `<button class="action-btn" style="background:#8e44ad" onclick="socket.emit('witchAction',{type:'poison',targetId:'${p.id}'})">毒</button>`;
+            }
+            
+            if (isSeerPhase && myRole === '預言家' && !isMe) 
+                btns += `<button class="action-btn" style="background:var(--me-blue)" onclick="socket.emit('checkRole','${p.id}')">驗</button>`;
+            
+            if (isVotingPhase && !isMe) 
+                btns += `<button class="action-btn" style="background:var(--accent-gold)" onclick="socket.emit('castVote','${p.id}')">投</button>`;
+        }
+        btns += `</div>`;
+
+        const roleClass = (myRole === '狼人' && p.role === '狼人') ? 'is-wolf' : '';
+        const nameTag = `${p.isHost ? '👑 ' : ''}${p.isBot ? '🤖 ' : ''}${p.name}${isMe ? ' (我)' : ''}`;
+        
+        // 3. 渲染投票標籤
+        const voteTag = (isVotingPhase && isMyTarget) ? ' <span style="color:var(--accent-gold); font-size:12px;">🗳️ (已選)</span>' : '';
+        
+        div.innerHTML = `<span><span class="${roleClass}">${nameTag}</span>${voteTag}${dots}</span>${btns}`;
+        list.appendChild(div);
+    });
+
+    // 狼人確認按鈕邏輯保持不變...
+    if (isWolfPhase && myRole === '狼人' && isAlive) {
+        const myV = wolfStatusData.find(v => v.id === socket.id);
+        const b = document.createElement("button");
+        b.innerText = myV?.isConfirmed ? "✅ 已確認殺害" : "🔒 確定此目標";
+        b.disabled = !myV?.targetId || myV?.isConfirmed;
+        b.onclick = () => socket.emit('wolfConfirm');
+        b.style = `width:100%; margin-top:10px; background:${myV?.isConfirmed?'#444':'var(--primary-red)'}; color:white; padding:12px; border:none; border-radius:8px; cursor:pointer; font-weight:bold;`;
+        list.appendChild(b);
+    }
+
+    document.getElementById("skipBtn").classList.toggle("hidden", !isDayPhase || !isAlive);
+    document.getElementById("wolfSection").classList.toggle("hidden", myRole !== '狼人' || status === 'waiting' || status === '等待開局');
+}
 
         socket.on('assignRole', r => { 
             myRole = r; 
