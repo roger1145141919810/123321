@@ -234,10 +234,20 @@ io.on('connection', (socket) => {
     function startVoting(roomId) {
         const room = rooms[roomId];
         if(!room || room.status === 'voting') return;
+
+        // 停止白天的 10 分鐘計時器
+        if (roomTimers[roomId]) {
+            clearInterval(roomTimers[roomId]);
+            delete roomTimers[roomId];
+        }
+
         room.status = 'voting';
         room.votes = {};
+        room.skipVotes = new Set(); // 核心修正：進入投票時清空跳過紀錄
         broadcastUpdate(roomId);
-        setTimeout(() => handleBotActions(roomId, 'voting'), 10000);
+        
+        // 增加延遲讓機器人投票，避免瞬間結束
+        setTimeout(() => handleBotActions(roomId, 'voting'), 2000); 
         startTimer(roomId, 30, () => settleVote(roomId));
     }
 
